@@ -123,7 +123,7 @@ void rst::rasterizer::draw(pos_buf_id pos_buffer, ind_buf_id ind_buffer, col_buf
 //Screen space rasterization
 void rst::rasterizer::rasterize_triangle(const Triangle& t) {
     auto v = t.toVector4();
-
+    Eigen::Vector3f color;
     // TODO : Find out the bounding box of current triangle.
     // iterate through the pixel and find if the current pixel is inside the triangle
     int min_x = min(v[0].x(), min(v[1].x(), v[2].x()));
@@ -137,19 +137,35 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
     //float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
     //z_interpolated *= w_reciprocal;
     
+    //超采样中心点step
+    vector<Eigen::Vector2f> super_sample_step = {{0.25, 0.25}, {0.75, 0.25}, {0.25, 0.75}, {0.75, 0.75}};
+
     for (int x = min_x; x <= max_x; x++) {
         for (int y = min_y; y <= max_y; y++) {
-            if (insideTriangle(x, y, &t.v[0], &t.v[1], &t.v[2])) {
-                auto[alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
-                float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
-                float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
-                z_interpolated *= w_reciprocal;
-
-                // if current pixel should be painted, draw it using the color of the triangle t
-                if (-z_interpolated < depth_buf[get_index(x, y)]) {
-                    Eigen::Vector3f current_pixel = {x, y, 0};
-                    set_pixel(current_pixel, t.getColor());
+            int count = 0;
+            float minDep = numeric_limits<float>::infinity();
+            int sampleIndex = get_index(x, y) * 4;
+            for (int i = 0; i < 4; i++){
+                if (insideTriangle(x + super_sample_step[i].x(), y + super_sample_step[i].y(), &t.v[0], &t.v[1], &t.v[2])) {
+                    auto[alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
+                    float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                    float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                    z_interpolated *= w_reciprocal;
+                    // if current pixel should be painted, draw it using the color of the triangle t
+                    if (-z_interpolated < depth_sample[sampleIndex + i]) {
+                        count++;
+                        depth_sample[sampleIndex + i] = -z_interpolated;
+                        frame_sample[sampleIndex + i] = t.getColor();
+                    }
                 }
+            }
+            depth_buf[get_index(x, y)] = std::min(depth_buf[get_index(x, y)], minDep);
+
+            if(count > 0)
+            {
+                color = (frame_sample[sampleIndex] + frame_sample[sampleIndex + 1] + frame_sample[sampleIndex + 2] + frame_sample[sampleIndex + 3]) / 4;
+                Eigen::Vector3f current_pixel = {x, y, 0};
+                set_pixel(current_pixel, color);
             }
         }
     }
@@ -177,10 +193,12 @@ void rst::rasterizer::clear(rst::Buffers buff)
     if ((buff & rst::Buffers::Color) == rst::Buffers::Color)
     {
         std::fill(frame_buf.begin(), frame_buf.end(), Eigen::Vector3f{0, 0, 0});
+        std::fill(frame_sample.begin(), frame_sample.end(), Eigen::Vector3f{0, 0, 0});
     }
     if ((buff & rst::Buffers::Depth) == rst::Buffers::Depth)
     {
         std::fill(depth_buf.begin(), depth_buf.end(), std::numeric_limits<float>::infinity());
+        std::fill(depth_sample.begin(), depth_sample.end(), std::numeric_limits<float>::infinity());
     }
 }
 
@@ -188,6 +206,8 @@ rst::rasterizer::rasterizer(int w, int h) : width(w), height(h)
 {
     frame_buf.resize(w * h);
     depth_buf.resize(w * h);
+    frame_sample.resize(w * h * 4);
+    depth_sample.resize(w * h * 4);
 }
 
 int rst::rasterizer::get_index(int x, int y)

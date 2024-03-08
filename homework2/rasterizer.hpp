@@ -94,7 +94,7 @@ namespace rst
 
         std::vector<float> depth_buf;
 
-        std::vector<float> frame_sample;
+        std::vector<Eigen::Vector3f> frame_sample;
         std::vector<float> depth_sample;
 
         int get_index(int x, int y);
