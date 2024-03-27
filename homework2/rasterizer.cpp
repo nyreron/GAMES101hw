@@ -40,7 +40,7 @@ auto to_vec4(const Eigen::Vector3f& v3, float w = 1.0f)
 }
 
 
-static bool insideTriangle(int x, int y, const Vector3f* a, const Vector3f* b, const Vector3f* c)
+static bool insideTriangle(float x, float y, const Vector3f* a, const Vector3f* b, const Vector3f* c)
 {   
     // TODO : Implement this function to check if the point (x, y) is inside the triangle represented by _v[0], _v[1], _v[2]
 
@@ -140,8 +140,8 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
     //超采样中心点step
     vector<Eigen::Vector2f> super_sample_step = {{0.25, 0.25}, {0.75, 0.25}, {0.25, 0.75}, {0.75, 0.75}};
 
-    for (int x = min_x; x <= max_x; x++) {
-        for (int y = min_y; y <= max_y; y++) {
+    for (float x = min_x; x <= max_x; x++) {
+        for (float y = min_y; y <= max_y; y++) {
             int count = 0;
             float minDep = numeric_limits<float>::infinity();
             int sampleIndex = get_index(x, y) * 4;
